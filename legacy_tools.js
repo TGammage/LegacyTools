@@ -88,6 +88,8 @@ var host = {
 	'path'			: window.location.pathname
 };
 
+console.log($(window));
+
 var head	= document.head || document.getElementsByTagName('head')[0],
 	body	= document.head || document.getElementsByTagName('body')[0],
 	$head	= $('head'),
@@ -156,7 +158,7 @@ $head.append('<link href="https://fonts.googleapis.com/css?family=Aldrich" rel="
 
 var button_registry = [];
 
-button_registry.push( [ 'input[type="button"][value="Attack"]', ['map2.php'] ] );
+// button_registry.push( [ 'input[type="button"][value="Attack"]', ['map2.php'] ] );
 button_registry.push( [ 'table.maintable a[href="map2.php"]:contains("Back to Wasteland")', ['hunting3.php', 'fight2.php'] ] );
 button_registry.push( [ 'table.maintable a[href="fight.php"]:contains("Back to Attack Setup")', ['fight2.php'] ] );
 button_registry.push( [ '#begin', ['hunting3.php', 'fight.php'] ] );
@@ -295,11 +297,17 @@ var gangChat = {
 		};
 
 		// Init
-		this.currentChannel	= 'gang2';
+		this.currentChannel		= 'gang2';
 		this.channels			= {};
+		this.historyStorage		= 'gangchatHistory';
 		this.history			= [];
+		this.historyMax			= 15;
 		this.historyPos			= 0;
-		this.scrollPos			= 0;
+		this.scrollStorage		= 'gangchatScroll';
+		this.scrollPos			= readCookie(this.scrollCookie) || 0;
+		this.scrollBtm			= 0;
+
+		console.log($(document)[0].cookie);
 
 		// Chat limit Init
 		this.updateChatLimit();
@@ -330,7 +338,7 @@ var gangChat = {
 			chatSend	= $('#gangchatSend');
 
 
-		// Scroll position save
+		// On scroll position save
 		$('#gangchat').scroll( function(e) {
 			gangChat.scrollPos = $(this).scrollTop();
 		});
@@ -353,6 +361,8 @@ var gangChat = {
 			// Which = down arrow
 			else if (e.which == 40)
 			{
+				e.preventDefault()
+
 				gangChat.historyPos++;
 
 				// Prevent greater than history length
@@ -368,7 +378,6 @@ var gangChat = {
 				else if (gangChat.historyPos == gangChat.history.length) {
 					$(this).val('');
 				}
-				e.preventDefault()
 			}
 		});
 	
@@ -388,17 +397,26 @@ var gangChat = {
 			chatInput.val('');
 		});
 
-		// 
+		// Aim emoji insertion into gang chat
 		$('#gangchatShowEmo').click(function() {
 			tamperDisplayEmoticons();
 			updateFocused($('#gangchatText'));
 		});
 
+		// Reset timeout when focusing on gang chat
 		$('#gangchatText').focus(function(){gangChat.resetTimeout()});
+
+		// Gather prior history
+		var temp = sessionStorage.getItem(this.historyStorage).split(';');
+
+		$.each(temp, function(i, encoded) {
+			gangChat.history[i] = decodeURIComponent(encoded);
+		});
+
+		this.historyPos = this.history.length;
 	},
 	'chatLoop'	: function() {
-		var doing_request,	
-			gangChat     = this,
+		var doing_request,
 			postData = {
 				'token'		: this.token,
 				'channel'	: 'gang2'
@@ -479,6 +497,8 @@ var gangChat = {
 					gangChat.channels.gang2.users = data.channels.gang2.users;
 					gangChat.updateUsers();
 
+					// On inital page load, scroll to bottom
+					// if() {}
 
 					// When we have new chat entry IDs
 					if( data.channels[channel].lastId > gangChat.channels[channel].lastId ) {
@@ -512,9 +532,27 @@ var gangChat = {
 	'send'	: function( text ) {
 		clearTimeout(this.timeout);
 
+		// Add submission to history
 		this.history.push(text);
+
+		// When maxing out history
+		if( this.history.length > this.historyMax ) {
+			this.history.shift();
+		}
+
+		// Reset history position back to the end
 		this.historyPos = this.history.length;
 
+		// Preserve history
+		var preserve = [];
+
+		$.each(this.history, function(i,text) {
+			preserve[i] = encodeURIComponent(text);
+		});
+
+		sessionStorage.setItem( this.historyStorage, preserve.join(';') );
+
+		// Add submission to output for POST data
 		this.output.push({ 'entry' : text });
 
 		this.chatLoop();
@@ -522,7 +560,7 @@ var gangChat = {
 	'updateChat'	: function() {
 		var chatBox = $('#gangchat');
 
-		chatBox.empty().append('<div class="gangChatBg"></div>');
+		chatBox.empty().append('<div class="gangchatScrollBtm"></div>');
 
 		$.each(gangChat.channels.gang2.chat, function(i,entry) {
 			if( entry.account.length == 0 ) {
@@ -530,14 +568,18 @@ var gangChat = {
 				chatBox.append('<font class="chattext">' + entry.chat + '</font>');
 			} else {
 				// Regular chat entries
+				var chat = entry.chat.replace( new RegExp(account, 'gi'), '<span class="oktext">' + account + '</span>' );
+
 				chatBox.append(
 					'<font class="colortext"><b><a href="https://www.legacy-game.net/profile.php?p=' + entry.account + '">' + entry.account + '</a></b> : ' + entry.sentTs + '</font>',
-					'<font class="chattext">' + entry.chat + '</font>'
+					'<font class="chattext">' + chat + '</font>'
 				);
 			}
 		});
 
-		chatBox.scrollTop(chatBox.prop('scrollHeight'));
+		gangChat.scrollBtm = chatBox.prop('scrollHeight');
+
+		chatBox.scrollTop(gangChat.scrollBtm);
 	},
 	// FEATURE: Updated List of Users in Gang Chat
 	'updateUsers'	: function() {
@@ -945,14 +987,7 @@ registerFunction( function() {
 	{
 		var href = window.location.href.replace( remove, '' );
 
-		history.pushState(
-			// Data
-            null,
-			// Title
-			null,
-			// URL
-			href
-		);
+		history.pushState( null, null, href );
 	}
 }, ['map2.php']);
 
