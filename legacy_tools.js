@@ -284,55 +284,64 @@ registerFunction( function()
 
 var gangChat = {
 	'init' : function() {
+		var self = this;
+
 		// Setup frame work for chat
-		gangChat.chatFrame();
+		self.chatFrame();
 
 		// Observer for chat spam blocker
 
-		this.config = {
+		self.config = {
 			'chatLimit'			: 50,
 			'timeoutIncrement'	: 500,
 			'minTimeout'		: 1000,
-			'maxTimeout'		: 7500
+			'maxTimeout'		: 7500,
+			'scrollTimeout'		: 1250
 		};
 
 		// Init
-		this.currentChannel		= 'gang2';
-		this.channels			= {};
-		this.historyStorage		= 'gangchatHistory';
-		this.history			= [];
-		this.historyMax			= 15;
-		this.historyPos			= 0;
-		this.scrollStorage		= 'gangchatScroll';
-		this.scrollPos			= readCookie(this.scrollCookie) || 0;
-		this.scrollBtm			= 0;
+		self.initializing		= true;
+		self.currentChannel		= 'gang2';
+		self.channels			= {};
 
-		console.log($(document)[0].cookie);
+		self.history = {
+			'key'	: 'gangchatHistory',
+			'max'	: 15,
+			'pos'	: 0,
+			'text'	: []
+		};
+
+		self.scroll = {
+			'key'		: 'gangchatScroll',
+			'pos'		: 0,
+			'btm'		: 0,
+			'timeout'	: undefined
+		};
 
 		// Chat limit Init
-		this.updateChatLimit();
+		self.updateChatLimit();
 
 		// Init general channel
 		// Has to be done to retrieve gang chat
-		this.channels['general'] = {
-			'lastId'	: 0,
-            'chat'		: []
+		self.channels['general'] = {
+			'lastId'	: 0
 		};
 
 		// Init gang channel
-		this.channels['gang2'] = {
+		self.channels['gang2'] = {
 			'lastId'	: 0,
+			'diffId'	: 0,
 			'chat'		: [],
 			'users'		: []
 		};
 
-		this.output   = [];
-		this.token    = token;
-		this.timeout  = undefined;
-		this.seconds  = this.config.minTimeout;
+		self.output   		= [];
+		self.token    		= token;
+		self.chatTimeout  	= undefined;
+		self.seconds  		= self.config.minTimeout;
 
 		// Init fetcher for chat
-		this.chatLoop();
+		self.chatLoop();
 
 		var chatInput	= $('#gangchatText'),
 			chatSend	= $('#gangchatSend');
@@ -340,42 +349,47 @@ var gangChat = {
 
 		// On scroll position save
 		$('#gangchat').scroll( function(e) {
-			gangChat.scrollPos = $(this).scrollTop();
+			self.scroll.pos = $(this).scrollTop();
+			clearTimeout(self.scroll.timeout);
+
+			self.scroll.timeout = setTimeout( function() {
+				sessionStorage.setItem( self.scroll.key, self.scroll.pos );
+			}, self.config.scrollTimeout );
 		});
 
 		// FEATURE: Preload prior entry submission
 		chatInput.on('keydown', function(e){
 			// Which = up arrow
-			if (e.which == 38) {
+			if(e.which == 38) {
 				e.preventDefault()
 
-				gangChat.historyPos--;
+				self.history.pos--;
 
 				// Prevent less than 0
-				if( gangChat.historyPos < 0 ) {
-					gangChat.historyPos = 0;
+				if( self.history.pos < 0 ) {
+					self.history.pos = 0;
 				}
 
-				$(this).val( gangChat.history[gangChat.historyPos] );
+				$(this).val( self.history.text[self.history.pos] );
 			}
 			// Which = down arrow
-			else if (e.which == 40)
+			else if(e.which == 40)
 			{
 				e.preventDefault()
 
-				gangChat.historyPos++;
+				self.history.pos++;
 
 				// Prevent greater than history length
-				if (gangChat.historyPos > gangChat.history.length) {
-					gangChat.historyPos = gangChat.history.length ;
+				if(self.history.pos > self.history.text.length) {
+					self.history.pos = self.history.text.length ;
 				}
 
 				// Preload prior entry
-				if (gangChat.historyPos < gangChat.history.length) {
-					$(this).val(gangChat.history[gangChat.historyPos]);
+				if(self.history.pos < self.history.text.length) {
+					$(this).val(self.history.text[self.history.pos]);
 				}
 				// At end of history, clear text
-				else if (gangChat.historyPos == gangChat.history.length) {
+				else if(self.history.pos == self.history.text.length) {
 					$(this).val('');
 				}
 			}
@@ -383,8 +397,7 @@ var gangChat = {
 	
 		// Send chat when pressing enter
 		chatInput.on('keypress', function(e){
-			if (e.which == 13)
-			{
+			if(e.which == 13) {
 				chatSend.click();
 				e.preventDefault();
 			}
@@ -392,7 +405,7 @@ var gangChat = {
 	
 		// Commence the chat, clear text box
 		chatSend.click(function(){
-			gangChat.send(chatInput.val());
+			self.send(chatInput.val());
 
 			chatInput.val('');
 		});
@@ -404,31 +417,32 @@ var gangChat = {
 		});
 
 		// Reset timeout when focusing on gang chat
-		$('#gangchatText').focus(function(){gangChat.resetTimeout()});
+		$('#gangchatText').focus(function(){self.resetTimeout()});
 
 		// Gather prior history
-		var temp = sessionStorage.getItem(this.historyStorage).split(';');
+		var temp = sessionStorage.getItem(this.history.key).split(';');
 
 		$.each(temp, function(i, encoded) {
-			gangChat.history[i] = decodeURIComponent(encoded);
+			self.history.text[i] = decodeURIComponent(encoded);
 		});
 
-		this.historyPos = this.history.length;
+		this.history.pos = this.history.text.length;
 	},
 	'chatLoop'	: function() {
 		var doing_request,
-			postData = {
-				'token'		: this.token,
+			self		= this,
+			postData	= {
+				'token'		: self.token,
 				'channel'	: 'gang2'
 			};
 	
 		// Add channel IDs for request
-		$.each(this.channels, function(k, d) {
+		$.each(self.channels, function(k, d) {
 			postData[k + '_id'] = d.lastId
 		});
 
-		if (this.output.length > 0) {
-			var send = this.output.shift();
+		if (self.output.length > 0) {
+			var send = self.output.shift();
 
 			postData.chat    = send.entry;
 		}
@@ -445,10 +459,10 @@ var gangChat = {
 				'data'		:     postData,
 				'dataType'	: 'json',
 				'error'		: function() {
-					gangChat.timeout = setTimeout(function(){ gangChat.chatLoop(); }, gangChat.seconds);
+					self.timeout = setTimeout(function(){ self.chatLoop(); }, self.seconds);
 				},
 				'success': function(data) {
-					gangChat.chatServerResponse(data);
+					self.chatServerResponse(data);
 				}
 			}
 		).always(function() {
@@ -457,7 +471,10 @@ var gangChat = {
 		});
 	},
 	'chatServerResponse'	: function( data ) {
-		gangChat.updateChatLimit(data.chatLimit);
+		var self = this;
+
+		// Spam bar
+		self.updateChatLimit(data.chatLimit);
 
 		if(typeof data.success !== "undefined") {
 /* 			var successContainer = $('#chat-success');
@@ -491,28 +508,34 @@ var gangChat = {
 			for (var channel in data.channels) {
 				// Set ID to latest for general so we dont request more than we care to receive
 				if( channel == 'general' ) {
-					gangChat.channels[channel].lastId = data.channels[channel].lastId;
+					self.channels[channel].lastId = data.channels[channel].lastId;
 				} else {
 					// Update Users
-					gangChat.channels.gang2.users = data.channels.gang2.users;
-					gangChat.updateUsers();
+					self.channels.gang2.users = data.channels.gang2.users;
+					self.updateUsers();
 
 					// On inital page load, scroll to bottom
 					// if() {}
 
+					// Difference of newest ID to last one recorded
+					self.channels[channel].diffId = data.channels[channel].lastId - self.channels[channel].lastId;
+
+					if( self.channels[channel].diffId > self.config.chatLimit ) {
+						self.channels[channel].diffId = self.config.chatLimit;
+					}
+
 					// When we have new chat entry IDs
-					if( data.channels[channel].lastId > gangChat.channels[channel].lastId ) {
+					if( self.channels[channel].diffId > 0 ) {
 						newEntry = true;
 
-						gangChat.channels[channel].lastId = data.channels[channel].lastId;
+						self.channels[channel].lastId = data.channels[channel].lastId;
 
-						for (var i=0; i < data.channels[channel].chat.length; i++)
-						{
-							gangChat.channels[channel].chat.push(data.channels[channel].chat[i]);
+						// Add new chat entries to the chat array, take off extras
+						for (var i=0; i < data.channels[channel].chat.length; i++) {
+							self.channels[channel].chat.push(data.channels[channel].chat[i]);
 
-							if (gangChat.channels[channel].chat.length > gangChat.config.chatLimit)
-							{
-								gangChat.channels[channel].chat.shift();
+							if (self.channels[channel].chat.length > self.config.chatLimit) {
+								self.channels[channel].chat.shift();
 							}
 						}
 					}
@@ -520,80 +543,94 @@ var gangChat = {
 			}
 
 			if(newEntry) {
-				gangChat.updateChat();
-				gangChat.resetTimeout();
+				self.updateChat();
+				self.resetTimeout();
 			} else {
-				gangChat.increaseTimeout();
+				self.increaseTimeout();
 			}
 		}
 
-		this.timeout = setTimeout(function(){ gangChat.chatLoop(); }, gangChat.seconds);
+		this.chatTimeout = setTimeout(function(){ self.chatLoop(); }, self.seconds);
 	},
 	'send'	: function( text ) {
-		clearTimeout(this.timeout);
+		var self = this;
+
+		clearTimeout(self.chatTimeout);
 
 		// Add submission to history
-		this.history.push(text);
+		self.history.text.push(text);
 
 		// When maxing out history
-		if( this.history.length > this.historyMax ) {
-			this.history.shift();
+		if( self.history.text.length > self.history.max ) {
+			self.history.text.shift();
 		}
 
 		// Reset history position back to the end
-		this.historyPos = this.history.length;
+		self.history.pos = self.history.text.length;
 
 		// Preserve history
 		var preserve = [];
 
-		$.each(this.history, function(i,text) {
+		$.each(self.history, function(i,text) {
 			preserve[i] = encodeURIComponent(text);
 		});
 
-		sessionStorage.setItem( this.historyStorage, preserve.join(';') );
+		sessionStorage.setItem( self.history.key, preserve.join(';') );
 
 		// Add submission to output for POST data
-		this.output.push({ 'entry' : text });
+		self.output.push({ 'entry' : text });
 
-		this.chatLoop();
+		self.chatLoop();
 	},
 	'updateChat'	: function() {
-		var chatBox = $('#gangchat');
+		var self	= this,
+			chatBox = $('#gangchat');
 
-		chatBox.empty().append('<div class="gangchatScrollBtm"></div>');
+		// When updating existing entries, remove old
+		if( !self.initializing ) {
+			for( var i = 0; i < self.channels.gang2.diffId; i++ ) {
+				chatBox.find('chatdata, chattext').first().remove();
+			}
+		}
 
-		$.each(gangChat.channels.gang2.chat, function(i,entry) {
+		$.each(self.channels.gang2.chat, function(i,entry) {
 			if( entry.account.length == 0 ) {
 				// For use of /me <action>
-				chatBox.append('<font class="chattext">' + entry.chat + '</font>');
+				chatBox.append('<div class="chatentry"><font class="chattext">' + entry.chat + '</font></div>');
 			} else {
 				// Regular chat entries
 				var chat = entry.chat.replace( new RegExp(account, 'gi'), '<span class="oktext">' + account + '</span>' );
 
 				chatBox.append(
-					'<font class="colortext"><b><a href="https://www.legacy-game.net/profile.php?p=' + entry.account + '">' + entry.account + '</a></b> : ' + entry.sentTs + '</font>',
-					'<font class="chattext">' + chat + '</font>'
+					'<div class="chatentry">' +
+					'<font class="colortext chatdata"><b><a href="https://www.legacy-game.net/profile.php?p=' + entry.account + '">' + entry.account + '</a></b> : ' + entry.sentTs + '</font>' +
+					'<font class="chattext">' + chat + '</font></div>'
 				);
 			}
 		});
 
-		gangChat.scrollBtm = chatBox.prop('scrollHeight');
+		self.scroll.btm = chatBox.prop('scrollHeight');
 
-		chatBox.scrollTop(gangChat.scrollBtm);
+		// Scroll to position
+		var scrollTo = self.initializing ? sessionStorage.getItem( self.scroll.key ) : self.scroll.btm;
+
+
+		chatBox.scrollTop(scrollTo);
 	},
-	// FEATURE: Updated List of Users in Gang Chat
+	// Updated List of Users in Gang Chat
 	'updateUsers'	: function() {
-		var userList = $('#gangchatUsers');
+		var self		=this,
+			userList	= $('#gangchatUsers');
 
 		userList.empty();
 
-		$.each( gangChat.channels.gang2.users, function(i, user) {
+		$.each( self.channels.gang2.users, function(i, user) {
 			if( user.account !== 'System' ) {
 				userList.append('<li><a href="https://www.legacy-game.net/profile.php?p=' + user.account + '">' + user.level + '  ' + user.account + '</a></li>');
 			}
 		});
 
-		$('#userCount').html((gangChat.channels.gang2.users.length - 1));
+		$('#userCount').html((self.channels.gang2.users.length - 1));
 	},
 	'chatFrame'	: function() {
 		var rightBar 	= $('.content-right'),
@@ -617,7 +654,7 @@ var gangChat = {
 		// CSS adjustments for chat box
 		$.tamperCSS([
 			'#gangchat{overflow-y:scroll;overflow-x:hidden;word-break:break-word;background-image:url("https://wiki.legacy-game.net/images/a/ac/DFLogoTransparent.png");background-position:center center;background-repeat:no-repeat;background-size:contain;background-color:rgba(0,0,0,1);}',
-			'#gangchat font:last-of-type{margin-bottom:15px}',
+			'#gangchat .chatentry:last-of-type{margin-bottom:15px}',
 			'#gangchatUsers{max-height:0;width:100%;margin:0;padding:0;list-style:none;font-family:"Aldrich";overflow:hidden;position:absolute;bottom:0;left:0;display:block;background-color:black;border-top:solid #333 thin;z-index:101;-webkit-transition:all 0.4s ease-out 0.4s;-moz-transition:all 0.4s ease-out 0.4s;-ms-transition:all 0.4s ease-out 0.4s;-o-transition:all 0.4s ease-out 0.4s;transition:all 0.4s ease-out 0.4s;}',
 			'#gangchatViewUsers{cursor:default;position:relative}',
 			'#gangchatViewUsers:hover > #gangchatUsers{max-height:500px;}',
@@ -629,9 +666,11 @@ var gangChat = {
 		]);
 		updateFocusListener();
 	},
-	// Updates visual chat spam limit indicator
 	'updateChatLimit'	: function( limit = 0 ) {
+		// Updates visual chat spam limit indicator
 		$('#gangchatBar').attr('src', 'img-bin/chatbar' + limit + '.gif');
+
+		// Prevent submission, flood filter
 	},
 	'resetTimeout'	: function() {
 		this.seconds = this.config.minTimeout;
