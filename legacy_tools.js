@@ -88,8 +88,6 @@ var host = {
 	'path'			: window.location.pathname
 };
 
-console.log($(window));
-
 var head	= document.head || document.getElementsByTagName('head')[0],
 	body	= document.head || document.getElementsByTagName('body')[0],
 	$head	= $('head'),
@@ -296,14 +294,23 @@ var gangChat = {
 			'timeoutIncrement'	: 500,
 			'minTimeout'		: 1000,
 			'maxTimeout'		: 7500,
-			'scrollTimeout'		: 1250
+			'scrollTimeout'		: 800,
+			'saveTimeout'		: 500
 		};
 
 		// Init
 		self.initializing		= true;
+		self.submission			= false;
 		self.currentChannel		= 'gang2';
 		self.channels			= {};
 
+		// Current Text Input Vitals
+		self.currentEntry = {
+			'key'		: 'gangchatInput',
+			'timeout'	: undefined
+		};
+
+		// Current Entry Submission History Vitals
 		self.history = {
 			'key'	: 'gangchatHistory',
 			'max'	: 15,
@@ -311,6 +318,7 @@ var gangChat = {
 			'text'	: []
 		};
 
+		// Scroll History Position Vitals
 		self.scroll = {
 			'key'		: 'gangchatScroll',
 			'pos'		: 0,
@@ -321,13 +329,13 @@ var gangChat = {
 		// Chat limit Init
 		self.updateChatLimit();
 
-		// Init general channel
+		// Init 'general' channel
 		// Has to be done to retrieve gang chat
 		self.channels['general'] = {
 			'lastId'	: 0
 		};
 
-		// Init gang channel
+		// Init 'gang' channel
 		self.channels['gang2'] = {
 			'lastId'	: 0,
 			'diffId'	: 0,
@@ -335,6 +343,7 @@ var gangChat = {
 			'users'		: []
 		};
 
+		// Runtime Vitals
 		self.output   		= [];
 		self.token    		= token;
 		self.chatTimeout  	= undefined;
@@ -349,7 +358,16 @@ var gangChat = {
 
 		// On scroll position save
 		$('#gangchat').scroll( function(e) {
-			self.scroll.pos = $(this).scrollTop();
+			self.scroll.pos = $(this).scrollTop(),
+			height			= $(this).outerHeight();
+
+			// Scroll To Bottom Button visibility toggle
+			if( (self.scroll.pos + height) < self.scroll.btm ) {
+				$('#scrollBottom').fadeIn(500);
+			} else {
+				$('#scrollBottom').fadeOut(200);
+			}
+
 			clearTimeout(self.scroll.timeout);
 
 			self.scroll.timeout = setTimeout( function() {
@@ -357,58 +375,84 @@ var gangChat = {
 			}, self.config.scrollTimeout );
 		});
 
-		// FEATURE: Preload prior entry submission
-		chatInput.on('keydown', function(e){
-			// Which = up arrow
-			if(e.which == 38) {
-				e.preventDefault()
-
-				self.history.pos--;
-
-				// Prevent less than 0
-				if( self.history.pos < 0 ) {
-					self.history.pos = 0;
-				}
-
-				$(this).val( self.history.text[self.history.pos] );
-			}
-			// Which = down arrow
-			else if(e.which == 40)
-			{
-				e.preventDefault()
-
-				self.history.pos++;
-
-				// Prevent greater than history length
-				if(self.history.pos > self.history.text.length) {
-					self.history.pos = self.history.text.length ;
-				}
-
-				// Preload prior entry
-				if(self.history.pos < self.history.text.length) {
-					$(this).val(self.history.text[self.history.pos]);
-				}
-				// At end of history, clear text
-				else if(self.history.pos == self.history.text.length) {
-					$(this).val('');
-				}
-			}
+		// Scroll To Bottom Button
+		$('#scrollBottom').click( function() {
+			$('#gangchat').animate( {scrollTop:self.scroll.btm}, 300 );
 		});
-	
-		// Send chat when pressing enter
-		chatInput.on('keypress', function(e){
-			if(e.which == 13) {
-				chatSend.click();
-				e.preventDefault();
+
+		// Input Listener
+		chatInput.on('keydown keyup', function(e){
+			switch( e.type )
+			{
+				case 'keydown':
+					// Preload prior entry submission
+					// Which = up arrow
+					if(e.keyCode == 38) {
+						e.preventDefault();
+
+						self.history.pos--;
+
+						// Prevent less than 0
+						if( self.history.pos < 0 ) {
+							self.history.pos = 0;
+						}
+
+						$(this).val( self.history.text[self.history.pos] );
+					}
+					// Which = down arrow
+					else if(e.keyCode == 40)
+					{
+						e.preventDefault();
+
+						self.history.pos++;
+
+						// Prevent greater than history length
+						if(self.history.pos > self.history.text.length) {
+							self.history.pos = self.history.text.length ;
+						}
+
+						// Preload prior entry
+						if(self.history.pos < self.history.text.length) {
+							$(this).val(self.history.text[self.history.pos]);
+						}
+						// At end of history, clear text
+						else if(self.history.pos == self.history.text.length) {
+							$(this).val('');
+						}
+					}
+				break;
+
+				case 'keyup':
+					// On 'Enter' send chat
+					if(e.keyCode == 13) {
+						chatSend.click();
+
+						e.preventDefault();
+
+						// Remove current text preservation
+						sessionStorage.setItem( self.currentEntry.key, '' );
+					} else if( e.keyCode != 38 && e.keyCode != 40 ) {
+						// Preserve text for when page refreshes
+						clearTimeout(self.currentEntry.timeout);
+
+						// Save text on delay for fast typers
+						self.currentEntry.timeout = setTimeout( function() {
+							sessionStorage.setItem( self.currentEntry.key, chatInput.val() );
+						}, self.config.saveTimeout );
+						
+					}
+				break;
 			}
 		});
 	
 		// Commence the chat, clear text box
 		chatSend.click(function(){
 			self.send(chatInput.val());
-
 			chatInput.val('');
 		});
+
+		// Preload input text save
+		chatInput.val(sessionStorage.getItem( self.currentEntry.key ));
 
 		// Aim emoji insertion into gang chat
 		$('#gangchatShowEmo').click(function() {
@@ -426,6 +470,7 @@ var gangChat = {
 			self.history.text[i] = decodeURIComponent(encoded);
 		});
 
+		// Initially put history at the end
 		this.history.pos = this.history.text.length;
 	},
 	'chatLoop'	: function() {
@@ -441,10 +486,9 @@ var gangChat = {
 			postData[k + '_id'] = d.lastId
 		});
 
-		if (self.output.length > 0) {
-			var send = self.output.shift();
-
-			postData.chat    = send.entry;
+		// Entry Submission
+		if( self.output.length > 0 ) {
+			postData.chat = self.output.shift();
 		}
 
 		// Prevent request stacking
@@ -514,9 +558,6 @@ var gangChat = {
 					self.channels.gang2.users = data.channels.gang2.users;
 					self.updateUsers();
 
-					// On inital page load, scroll to bottom
-					// if() {}
-
 					// Difference of newest ID to last one recorded
 					self.channels[channel].diffId = data.channels[channel].lastId - self.channels[channel].lastId;
 
@@ -542,6 +583,7 @@ var gangChat = {
 				}
 			}
 
+			// When new entries found, update the chat
 			if(newEntry) {
 				self.updateChat();
 				self.resetTimeout();
@@ -550,6 +592,7 @@ var gangChat = {
 			}
 		}
 
+		// Run loop
 		this.chatTimeout = setTimeout(function(){ self.chatLoop(); }, self.seconds);
 	},
 	'send'	: function( text ) {
@@ -571,14 +614,16 @@ var gangChat = {
 		// Preserve history
 		var preserve = [];
 
-		$.each(self.history, function(i,text) {
+		$.each(self.history.text, function(i,text) {
 			preserve[i] = encodeURIComponent(text);
 		});
 
 		sessionStorage.setItem( self.history.key, preserve.join(';') );
 
 		// Add submission to output for POST data
-		self.output.push({ 'entry' : text });
+		self.output.push(text);
+
+		self.submission = true;
 
 		self.chatLoop();
 	},
@@ -589,11 +634,16 @@ var gangChat = {
 		// When updating existing entries, remove old
 		if( !self.initializing ) {
 			for( var i = 0; i < self.channels.gang2.diffId; i++ ) {
-				chatBox.find('chatdata, chattext').first().remove();
+				chatBox.find('.chatentry').first().remove();
 			}
 		}
 
-		$.each(self.channels.gang2.chat, function(i,entry) {
+		// Find the additions to add on
+		var i = self.channels.gang2.chat.length - self.channels.gang2.diffId;
+
+		for( i; i < self.channels.gang2.chat.length; i++ ) {
+			var entry = self.channels.gang2.chat[i];
+
 			if( entry.account.length == 0 ) {
 				// For use of /me <action>
 				chatBox.append('<div class="chatentry"><font class="chattext">' + entry.chat + '</font></div>');
@@ -607,15 +657,23 @@ var gangChat = {
 					'<font class="chattext">' + chat + '</font></div>'
 				);
 			}
-		});
+		}
 
 		self.scroll.btm = chatBox.prop('scrollHeight');
 
 		// Scroll to position
 		var scrollTo = self.initializing ? sessionStorage.getItem( self.scroll.key ) : self.scroll.btm;
 
+		// Scroll To Bottom Button to fade in when initially at top
+		if( scrollTo == 0 && self.initializing ) { chatBox.scroll(); }
 
-		chatBox.scrollTop(scrollTo);
+		// Scroll when init or submitting
+		if( self.initializing || self.submission || !$('#scrollBottom').is(':visible') ) {
+			chatBox.scrollTop(scrollTo);
+		}
+
+		self.initializing	= false;
+		self.submission		= false;
 	},
 	// Updated List of Users in Gang Chat
 	'updateUsers'	: function() {
@@ -634,7 +692,7 @@ var gangChat = {
 	},
 	'chatFrame'	: function() {
 		var rightBar 	= $('.content-right'),
-			sidebox		= '<div class="sidebox" id="gangChatSidebox"></div>',
+			sidebox		= '<div class="sidebox" id="gangChatSidebox"><span id="scrollBottom"></span></div>',
 			header		= '<div class="sidebox-header">Dark Flame Chat</div>',
 			chatbox		= '<div class="sidebox-chat gangchat" id="gangchat"></div>',
 			footer1		= '<div class="sidebox-footer1"></div>',
@@ -644,7 +702,7 @@ var gangChat = {
 
 		$('#gangChatSidebox').append(header + chatbox + footer1 + footer2);
 
-		var chatInput	= '<input id="gangchatText" name="gangchat" class="chatbox" type="text" maxlength="256">',
+		var chatInput	= '<input id="gangchatText" name="gangchat" class="chatbox" type="text" maxlength="256" autocomplete="off">',
 			chatBtn		= '<input class="chatbutton" type="button" id="gangchatSend" value=">"><br>',
 			chatBar		= '<img id="gangchatBar" src="img-bin/chatbar0.gif" class="chatbar">';
 			chatEmo		= '<img src="/img-bin/emoticons/open-emoticons.png" id="gangchatShowEmo">';
@@ -662,8 +720,12 @@ var gangChat = {
 			'#gangchatUsers > li:last-of-type{margin-bottom:10px}',
 			'#gangchatUsers > li{margin:3px 0;}',
 			'#gangchatShowEmo{position:relative;top:3px;left:4px;width:14px;cursor:pointer;}',
-			'.chattext{display:block}'
+			'.chattext{display:block}',
+			'span#scrollBottom{display:none;padding:0 8px;position:absolute;bottom:110px;right:15px;float:right;background-color:var(--accent-color);border-radius:50px;color:#AAA;font-size:20pt;cursor:pointer;background:var(--accent-color);background:-moz-radial-gradient(circle, var(--accent-color) 0%, rgba(0,0,0,1) 80%);background:-webkit-radial-gradient(circle, var(--accent-color) 0%, rgba(0,0,0,1) 80%);background:radial-gradient(circle, var(--accent-color) 0%, rgba(0,0,0,1) 80%);}',
+			'span#scrollBottom::before{content:"⭳"}'
 		]);
+
+		// Emoji Help
 		updateFocusListener();
 	},
 	'updateChatLimit'	: function( limit = 0 ) {
@@ -1061,3 +1123,5 @@ function assert(condition, msg) {
     throw new Error(msg);
   }
 }
+
+registerFunction( function(){console.log($(window)[0]);}, ['.*']);
