@@ -615,7 +615,7 @@ var gangChat = {
 		var preserve = [];
 
 		$.each(self.history.text, function(i,text) {
-			preserve[i] = encodeURIComponent(text);
+			preserve.push(encodeURIComponent(text));
 		});
 
 		sessionStorage.setItem( self.history.key, preserve.join(';') );
@@ -669,7 +669,11 @@ var gangChat = {
 
 		// Scroll when init or submitting
 		if( self.initializing || self.submission || !$('#scrollBottom').is(':visible') ) {
-			chatBox.scrollTop(scrollTo);
+			if( scrollTo === null ) {
+				chatBox.scrollTop(self.scroll.btm);
+			} else {
+				chatBox.scrollTop(scrollTo);
+			}
 		}
 
 		self.initializing	= false;
