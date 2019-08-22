@@ -145,7 +145,7 @@ var tamperCSS = [
 registerFunction( function() {
 	$.tamperCSS(tamperCSS);
 }, ['.*']);
-	
+
 $head.append('<link href="https://fonts.googleapis.com/css?family=Aldrich" rel="stylesheet">');
 
 // =============================================================================
@@ -361,8 +361,8 @@ var gangChat = {
 			self.scroll.pos = $(this).scrollTop(),
 			height			= $(this).outerHeight();
 
-			// Scroll To Bottom Button visibility toggle
-			if( (self.scroll.pos + height) < self.scroll.btm ) {
+            // Scroll To Bottom Button visibility toggle
+			if( Math.ceil(self.scroll.pos + height) < self.scroll.btm ) {
 				$('#scrollBottom').fadeIn(500);
 			} else {
 				$('#scrollBottom').fadeOut(200);
@@ -439,12 +439,12 @@ var gangChat = {
 						self.currentEntry.timeout = setTimeout( function() {
 							sessionStorage.setItem( self.currentEntry.key, chatInput.val() );
 						}, self.config.saveTimeout );
-						
+
 					}
 				break;
 			}
 		});
-	
+
 		// Commence the chat, clear text box
 		chatSend.click(function(){
 			self.send(chatInput.val());
@@ -480,7 +480,7 @@ var gangChat = {
 				'token'		: self.token,
 				'channel'	: 'gang2'
 			};
-	
+
 		// Add channel IDs for request
 		$.each(self.channels, function(k, d) {
 			postData[k + '_id'] = d.lastId
@@ -522,12 +522,10 @@ var gangChat = {
 
 		if(typeof data.success !== "undefined") {
 /* 			var successContainer = $('#chat-success');
-
 			// Do not allow successes to stack.
 			if(successContainer.is(":visible")) {
 				return;
 			}
-
 			successContainer.html('<span>Success:</span> ' + data.success).fadeIn("fast").delay(5000).fadeOut("fast");
  */		}
 		else if (data.error !== false) {
@@ -537,12 +535,10 @@ var gangChat = {
 			}
 
 /* 			var errorContainer = $('#chat-error');
-
 			// Do not allow errors to stack.
 			if(errorContainer.is(":visible")) {
 				return;
 			}
-
 			errorContainer.html('<span>Error:</span> ' + data.error).fadeIn("fast").delay(5000).fadeOut("fast");
  */
 		} else {
