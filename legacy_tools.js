@@ -3,6 +3,8 @@
 // @description Improvements to Legacy Game
 // @include     https://www.legacy-game.net/*
 // @include     https://dev.legacy-game.net/*
+// @include     https://direct.legacy-game.net/*
+// @include     http://*legacy.localdev/*
 // @grant       none
 // @require     http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.js
 // @require     http://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.10.4/jquery-ui.js
@@ -37,11 +39,15 @@ function registerFunction(fn, path_rules, subdomain = 'all' ) {
 		'registerFunction path_rules cannot be empty'
 	);
 
+	// Get Subdomain
 	var current_domain	= window.location.hostname,
 	  current_subdomain	= current_domain.split( '.', 1 )[0];
 
+	// Create regex to match for registering
+	var reggie = subdomain.split(' ').join('|');
+
 	$.each(path_rules, function(i, rule) {
-		if( subdomain === 'all' || subdomain === current_subdomain )
+		if( subdomain === 'all' || subdomain.match(current_subdomain) )
 		{
 			if (rule in function_registry) {
 				function_registry[rule].push(fn);
@@ -54,6 +60,7 @@ function registerFunction(fn, path_rules, subdomain = 'all' ) {
 
 registerFunction( function(){console.log("RegLeg Test");}, ['.*'], 'www' );
 registerFunction( function(){console.log("DevLeg Test");}, ['.*'], 'dev' );
+registerFunction( function(){console.log("DirectLeg Test");}, ['.*'], 'direct' );
 registerFunction( function(){console.log("AllLeg Test");}, ['.*']);
 
 
@@ -134,7 +141,7 @@ var Player = {
 
 var tamperCSS = [
 	':root{--accent-color:' + $('.colortext').css('color') + '}',
-	'::-webkit-scrollbar {width:20px}',
+	'::-webkit-scrollbar {width:15px}',
 	'::-webkit-scrollbar-track, *:not(body)::-webkit-resizer{box-shadow: inset 0 0 5px grey;border-radius: 10px;}',
 	'::-webkit-scrollbar-thumb {background: rgb(0,0,0);background: -moz-linear-gradient(90deg, rgba(0,0,0,1) 0%, var(--accent-color) 50%, rgba(0,0,0,1) 100%);background: -webkit-linear-gradient(90deg, rgba(0,0,0,1) 0%, var(--accent-color) 50%, rgba(0,0,0,1) 100%);background: linear-gradient(90deg, rgba(0,0,0,1) 0%, var(--accent-color) 50%, rgba(0,0,0,1) 100%);filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#000000",endColorstr="#000000",GradientType=1);border-radius: 10px;}',
 	'#gangchat::-webkit-scrollbar{width:8px}',
@@ -210,7 +217,7 @@ registerFunction(function addItemHovercards() {
       })
       .mouseout(hideddrivetip);
   });
-}, ["profile.php", "market2.php", "market3.php", "market6.php"]);
+}, [".*"]);
 
 
 // FEATURE: Insert emoticons into focused text input
@@ -278,7 +285,7 @@ function tamperDisplayEmoticons() {
 registerFunction( function()
 {
 	gangChat.init();
-}, ['.*'], 'www' );
+}, ['.*'], 'www direct' );
 
 var gangChat = {
 	'init' : function() {
@@ -795,7 +802,7 @@ registerFunction(function setUpPlayerCombat() {
 // FEATURE: Instant Vote on click
 registerFunction( function()
 {
-	Voting.init();
+	// Voting.init();
 }, ['voting.php'], 'www' );
 
 var Voting,
@@ -1077,7 +1084,7 @@ registerFunction( function()
 // Initiate Map Features
 registerFunction( function()
 {
-	// TODO : Add map feature initialize here
+	$('#warchat').attr('autocomplete', 'off');
 }, ['map2.php'], 'www' );
 
 
